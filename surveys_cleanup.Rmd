@@ -1,0 +1,174 @@
+---
+title: |  
+  | Experimental Research & Analysis
+  | Team Project
+author: 
+- "Jimmy Dunn, Thanh Le, Sarah Reed"
+- "W241 Experiments and Causality | Summer 2019 | Section 2 | Tues 4:00 PM"
+output:
+  pdf_document:
+    extra_dependencies:
+    - dcolumn
+    - float
+    - rotating
+    fig_caption: yes
+  html_document:
+    df_print: paged
+geometry: margin=1in
+fontsize: 11pt
+editor_options: 
+  chunk_output_type: inline
+---
+
+This RMD is mainly for data cleanup to be used in the main analysis RMD.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, prompt = TRUE, fig.pos = 'H', comment=NA, results = "hide")
+knitr::knit_hooks$set(plot = knitr::hook_plot_tex)
+```
+
+```{r message=FALSE}
+# install.packages("ggpubr")
+```
+
+```{r message=FALSE}
+# loading various libraries
+library(data.table)
+library(stargazer)
+library(dplyr)
+library(foreign)
+library(lmtest)
+library(sandwich)
+library(AER)
+library(ggplot2)
+library(corrplot)
+library(devtools)
+library(ggpubr)
+```
+
+```{r}
+# a simple clean-up was done in csv file to do simple consolidation of data, the remaining data analysis type clean-up will be done here
+
+# read data and store in data table
+survey_data <- fread('./w241_survey.csv')
+survey_data
+```
+
+### Data Clean-up
+
+```{r}
+survey_data_num <- fread('./w241_survey_numeric.csv')
+survey_data_num
+```
+
+```{r}
+survey_data_num <- subset(survey_data_num, select = c(response_ID, 
+                                                      friendly,
+                                                      positive, 
+                                                      sincere, 
+                                                      comfortable,
+                                                      work_with,
+                                                      situation,
+                                                      peers,
+                                                      others_above,
+                                                      others_below,
+                                                      externally,
+                                                      hardworking,
+                                                      knowledgeable, 
+                                                      motivated,
+                                                      leadership,
+                                                      project))
+
+survey_data_num
+```
+
+```{r}
+survey_data <- merge(survey_data, survey_data_num, by = "response_ID")
+survey_data
+```
+
+```{r}
+summary(survey_data)
+```
+
+```{r}
+# remove surveys that didn't have response to survey questions
+survey_data = na.omit(survey_data, cols="test_col")
+summary(survey_data)
+```
+
+```{r}
+# Check how many did not pass attention check
+sum(survey_data$attention_check != "Strongly Disagree")
+survey_data[survey_data$attention_check != "Strongly Disagree"]
+by(data=survey_data[survey_data$attention_check != "Strongly Disagree"], INDICES=survey_data[survey_data$attention_check != "Strongly Disagree"]$assignment, FUN=count)
+
+# Remove surveys that did not pass attention check
+survey_data <- survey_data[survey_data$attention_check == "Strongly Disagree"]
+survey_data
+```
+
+```{r}
+# remove unfinished surveys
+survey_data <- survey_data[survey_data$progress == "100"]
+survey_data
+```
+
+```{r}
+group_details <- survey_data[, sum(test_col, na.rm = TRUE), by = assignment]
+group_details
+```
+
+```{r} 
+# removing fields we likely will not need or use for our analysis
+
+survey_data <- subset(survey_data, select = -c(start_date, end_date, response_type, progress,
+                                               IP_address, duration_sec, 
+                                               finished_survey, recorded_date, 
+                                               response_ID, last_name, first_name, email, 
+                                               external_ref, channel, language, 
+                                               consent, survey_summary, raffle, 
+                                               topics, test_col, email_pos_attitude, 
+                                               email_friendliness, email_sincere, 
+                                               email_comfortable, email_good_colleague,
+                                               email_appropriate_situation, 
+                                               email_appropriate_peer, email_appropriate_mgmt,
+                                               email_appropriate_lower, 
+                                               email_appropriate_external, email_hardworking,
+                                               email_knowledgeable, 
+                                               email_motivated, email_leadership, 
+                                               email_project_lead))
+
+survey_data
+```
+
+```{r}
+str(survey_data)
+```
+
+```{r}
+summary(survey_data)
+```
+```{r}
+# updating variable value
+survey_data$assignment[survey_data$assignment == "ControlEmail"] <- "Control"
+survey_data$assignment[survey_data$assignment == "TreatmentEmail"] <- "Treatment"
+
+# From the data, we create aggregate columns that represent the mean of question groups grouped by dimension
+# Warmth
+survey_data[, warmth := rowMeans(survey_data[, .(friendly, positive, sincere, comfortable, work_with)])]
+
+# Professionalism
+survey_data[, professionalism := rowMeans(survey_data[, .(externally, others_above, others_below, peers, situation)])]
+
+# Competence
+survey_data[, competence := rowMeans(survey_data[, .(hardworking, knowledgeable, leadership, motivated, project)])]
+
+# Overall Average Perception
+survey_data[, perception:= rowMeans(survey_data[, .(warmth, professionalism, competence)])]
+```
+
+```{r}
+write.csv(survey_data, file = "cleaned_surveys.csv")
+```
+
